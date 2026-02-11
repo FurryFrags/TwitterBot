@@ -18,13 +18,11 @@
       <div class="settings-grid">
         <label>
           Provider
-          <select id="provider">
-            <option value="openrouter">OpenRouter (free routes)</option>
-          </select>
+          <select id="provider"></select>
         </label>
         <label>
           Model
-          <input id="model" type="text" value="meta-llama/llama-3.1-8b-instruct:free" />
+          <select id="model"></select>
         </label>
         <label class="api-key-field">
           API Key
@@ -32,7 +30,7 @@
         </label>
         <button id="saveSettings" type="button">Save Settings</button>
       </div>
-      <p class="help-text">Your API key is stored only in localStorage for this browser.</p>
+      <p class="help-text">Provider-specific API keys and selected models are stored only in localStorage for this browser.</p>
     </section>
 
     <section class="chat-panel" aria-labelledby="chat-heading">
@@ -40,6 +38,7 @@
         <h2 id="chat-heading">Conversation</h2>
         <p id="status" class="status idle" role="status" aria-live="polite">Idle</p>
       </div>
+      <div id="fallbackNotice" class="notice-banner" role="status" aria-live="polite" hidden></div>
       <div id="errorBanner" class="error-banner" role="alert" hidden></div>
       <div id="transcript" class="transcript" aria-live="polite"></div>
 

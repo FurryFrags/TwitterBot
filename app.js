@@ -1,3 +1,72 @@
+const providers = {
+  openrouter: {
+    label: "OpenRouter",
+    endpoint: "https://openrouter.ai/api/v1/chat/completions",
+    keyPlaceholder: "sk-or-v1-...",
+    models: [
+      { id: "meta-llama/llama-3.1-8b-instruct:free", label: "Llama 3.1 8B Instruct (free)" },
+      { id: "mistralai/mistral-7b-instruct:free", label: "Mistral 7B Instruct (free)" },
+    ],
+    buildHeaders: ({ apiKey }) => ({
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+      "HTTP-Referer": window.location.origin,
+      "X-Title": "Browser Chat UI",
+    }),
+    buildPayload: ({ model, messages }) => ({
+      model,
+      messages,
+      stream: false,
+    }),
+    normalizeResponse: (payload) => {
+      const content = payload?.choices?.[0]?.message?.content;
+
+      if (Array.isArray(content)) {
+        return {
+          role: "assistant",
+          content: content
+            .map((chunk) => (typeof chunk === "string" ? chunk : chunk?.text || ""))
+            .join("")
+            .trim(),
+        };
+      }
+
+      if (typeof content !== "string") {
+        throw new Error("Provider returned an unexpected response format.");
+      }
+
+      return { role: "assistant", content };
+    },
+  },
+  huggingface: {
+    label: "Hugging Face",
+    endpoint: "https://router.huggingface.co/v1/chat/completions",
+    keyPlaceholder: "hf_...",
+    models: [
+      { id: "meta-llama/Llama-3.1-8B-Instruct", label: "Llama 3.1 8B Instruct" },
+      { id: "mistralai/Mistral-7B-Instruct-v0.3", label: "Mistral 7B Instruct v0.3" },
+    ],
+    buildHeaders: ({ apiKey }) => ({
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    }),
+    buildPayload: ({ model, messages }) => ({
+      model,
+      messages,
+      stream: false,
+    }),
+    normalizeResponse: (payload) => {
+      const content = payload?.choices?.[0]?.message?.content;
+      if (typeof content !== "string") {
+        throw new Error("Provider returned an unexpected response format.");
+      }
+      return { role: "assistant", content };
+    },
+  },
+};
+
+const providerOrder = Object.keys(providers);
+
 const state = {
   history: [],
   waiting: false,
@@ -14,6 +83,7 @@ const els = {
   status: document.getElementById("status"),
   transcript: document.getElementById("transcript"),
   errorBanner: document.getElementById("errorBanner"),
+  fallbackNotice: document.getElementById("fallbackNotice"),
 };
 
 const STORAGE_KEY = "browser-chat-settings";
@@ -21,7 +91,9 @@ const STORAGE_KEY = "browser-chat-settings";
 bootstrap();
 
 function bootstrap() {
+  populateProviderOptions();
   restoreSettings();
+  syncProviderUi();
   render();
 
   els.saveSettings.addEventListener("click", () => {
@@ -30,29 +102,98 @@ function bootstrap() {
     clearError();
   });
 
+  els.provider.addEventListener("change", () => {
+    syncProviderUi();
+    persistSettings();
+  });
+
   els.chatForm.addEventListener("submit", onSubmit);
+}
+
+function populateProviderOptions() {
+  els.provider.innerHTML = "";
+  for (const [providerId, providerConfig] of Object.entries(providers)) {
+    const option = document.createElement("option");
+    option.value = providerId;
+    option.textContent = `${providerConfig.label} (free-tier options)`;
+    els.provider.appendChild(option);
+  }
+}
+
+function syncProviderUi() {
+  const providerConfig = providers[els.provider.value] || providers[providerOrder[0]];
+  els.apiKey.placeholder = providerConfig.keyPlaceholder;
+  populateModelOptions(els.provider.value);
+}
+
+function populateModelOptions(providerId) {
+  const providerConfig = providers[providerId] || providers[providerOrder[0]];
+  const currentModel = els.model.value;
+  els.model.innerHTML = "";
+
+  for (const model of providerConfig.models) {
+    const option = document.createElement("option");
+    option.value = model.id;
+    option.textContent = model.label;
+    els.model.appendChild(option);
+  }
+
+  const matchingModel = providerConfig.models.find((model) => model.id === currentModel);
+  els.model.value = matchingModel ? matchingModel.id : providerConfig.models[0].id;
 }
 
 function restoreSettings() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
-    if (saved.provider) els.provider.value = saved.provider;
-    if (saved.model) els.model.value = saved.model;
-    if (saved.apiKey) els.apiKey.value = saved.apiKey;
+    if (saved.provider && providers[saved.provider]) {
+      els.provider.value = saved.provider;
+    } else {
+      els.provider.value = providerOrder[0];
+    }
+
+    if (saved.apiKeys && typeof saved.apiKeys === "object") {
+      els.apiKey.value = saved.apiKeys[els.provider.value] || "";
+    }
+
+    populateModelOptions(els.provider.value);
+    if (saved.models && typeof saved.models === "object" && saved.models[els.provider.value]) {
+      const savedModel = saved.models[els.provider.value];
+      const supportsSavedModel = providers[els.provider.value].models.some((model) => model.id === savedModel);
+      if (supportsSavedModel) {
+        els.model.value = savedModel;
+      }
+    }
   } catch {
+    els.provider.value = providerOrder[0];
+    populateModelOptions(els.provider.value);
     // Ignore malformed localStorage and continue with defaults.
   }
 }
 
 function persistSettings() {
+  const existing = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+  const apiKeys = { ...(existing.apiKeys || {}) };
+  const models = { ...(existing.models || {}) };
+
+  apiKeys[els.provider.value] = els.apiKey.value.trim();
+  models[els.provider.value] = els.model.value;
+
   localStorage.setItem(
     STORAGE_KEY,
     JSON.stringify({
       provider: els.provider.value,
-      model: els.model.value.trim(),
-      apiKey: els.apiKey.value.trim(),
+      apiKeys,
+      models,
     })
   );
+}
+
+function getStoredSettings() {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+  } catch {
+    return {};
+  }
 }
 
 function setStatus(kind, text) {
@@ -69,6 +210,11 @@ function setError(message) {
 function clearError() {
   els.errorBanner.hidden = true;
   els.errorBanner.textContent = "";
+}
+
+function setFallbackNotice(message = "") {
+  els.fallbackNotice.hidden = !message;
+  els.fallbackNotice.textContent = message;
 }
 
 function render() {
@@ -118,18 +264,20 @@ function setWaiting(waiting) {
 async function onSubmit(event) {
   event.preventDefault();
   clearError();
+  setFallbackNotice("");
 
   const text = els.message.value.trim();
-  const apiKey = els.apiKey.value.trim();
-  const model = els.model.value.trim();
+  const provider = els.provider.value;
+  const model = els.model.value;
+  const selectedApiKey = els.apiKey.value.trim();
 
   if (!text) {
     setError("Please enter a message.");
     return;
   }
 
-  if (!apiKey) {
-    setError("Missing API key. Add your provider key in Settings.");
+  if (!selectedApiKey) {
+    setError("Missing API key for the selected provider.");
     return;
   }
 
@@ -145,10 +293,9 @@ async function onSubmit(event) {
 
   try {
     setWaiting(true);
-    const assistantReply = await fetchAssistantResponse({
-      apiKey,
-      model,
-      provider: els.provider.value,
+    const assistantReply = await fetchAssistantResponseWithFallback({
+      primaryProvider: provider,
+      primaryModel: model,
     });
 
     if (!assistantReply || !assistantReply.trim()) {
@@ -166,32 +313,65 @@ async function onSubmit(event) {
   }
 }
 
-async function fetchAssistantResponse({ provider, apiKey, model }) {
+async function fetchAssistantResponseWithFallback({ primaryProvider, primaryModel }) {
+  const settings = getStoredSettings();
+  const providerSequence = [
+    primaryProvider,
+    ...providerOrder.filter((providerId) => providerId !== primaryProvider),
+  ];
+
+  let lastFailure = null;
+
+  for (const providerId of providerSequence) {
+    const providerConfig = providers[providerId];
+    const apiKey = settings?.apiKeys?.[providerId] || "";
+    if (!apiKey) {
+      continue;
+    }
+
+    const model = providerId === primaryProvider
+      ? primaryModel
+      : settings?.models?.[providerId] || providerConfig.models[0].id;
+
+    try {
+      const message = await requestProvider({ providerId, apiKey, model });
+      if (providerId !== primaryProvider) {
+        setFallbackNotice(
+          `Primary provider failed. Response served by ${providerConfig.label} (${model}).`
+        );
+      }
+      return message.content;
+    } catch (error) {
+      lastFailure = error;
+      const canFallback = [401, 429].includes(error.status) || (error.status >= 500 && error.status <= 599);
+      if (!canFallback) {
+        throw error;
+      }
+    }
+  }
+
+  throw lastFailure || new Error("No configured provider with a valid API key is available.");
+}
+
+async function requestProvider({ providerId, apiKey, model }) {
+  const providerConfig = providers[providerId];
+
+  if (!providerConfig) {
+    throw new Error(`Unsupported provider: ${providerId}`);
+  }
+
   const messages = state.history
     .filter((turn) => !turn.loading)
     .map(({ role, content }) => ({ role, content }));
 
-  if (provider !== "openrouter") {
-    throw new Error(`Unsupported provider: ${provider}`);
-  }
-
   let response;
   try {
-    response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    response = await fetch(providerConfig.endpoint, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-        "HTTP-Referer": window.location.origin,
-        "X-Title": "Browser Chat UI",
-      },
-      body: JSON.stringify({
-        model,
-        messages,
-        stream: false,
-      }),
+      headers: providerConfig.buildHeaders({ apiKey }),
+      body: JSON.stringify(providerConfig.buildPayload({ model, messages })),
     });
-  } catch (error) {
+  } catch {
     throw new Error(
       "Network/CORS failure while reaching the provider. Check connectivity and whether the endpoint allows browser requests."
     );
@@ -201,35 +381,25 @@ async function fetchAssistantResponse({ provider, apiKey, model }) {
   try {
     payload = await response.json();
   } catch {
-    throw new Error(`Provider returned non-JSON response (HTTP ${response.status}).`);
+    const nonJsonError = new Error(`Provider returned non-JSON response (HTTP ${response.status}).`);
+    nonJsonError.status = response.status;
+    throw nonJsonError;
   }
 
   if (!response.ok) {
     const providerMessage = payload?.error?.message || payload?.message || "Unknown provider error.";
+    let errorMessage = `Provider error (${response.status}): ${providerMessage}`;
 
     if (response.status === 401 || response.status === 403) {
-      throw new Error("Invalid or unauthorized API key. Verify your key and model permissions.");
+      errorMessage = "Invalid or unauthorized API key. Verify your key and model permissions.";
+    } else if (response.status === 429) {
+      errorMessage = "Rate limit hit on the provider. Please wait and retry.";
     }
 
-    if (response.status === 429) {
-      throw new Error("Rate limit hit on the provider. Please wait and retry.");
-    }
-
-    throw new Error(`Provider error (${response.status}): ${providerMessage}`);
+    const providerError = new Error(errorMessage);
+    providerError.status = response.status;
+    throw providerError;
   }
 
-  const content = payload?.choices?.[0]?.message?.content;
-
-  if (Array.isArray(content)) {
-    return content
-      .map((chunk) => (typeof chunk === "string" ? chunk : chunk?.text || ""))
-      .join("")
-      .trim();
-  }
-
-  if (typeof content !== "string") {
-    throw new Error("Provider returned an unexpected response format.");
-  }
-
-  return content;
+  return providerConfig.normalizeResponse(payload);
 }
