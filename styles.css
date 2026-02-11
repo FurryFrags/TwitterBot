@@ -126,6 +126,16 @@ button:disabled {
   border-color: var(--accent);
 }
 
+
+.notice-banner {
+  background: color-mix(in srgb, #f59e0b, #000 75%);
+  border: 1px solid #f59e0b;
+  color: #fde68a;
+  padding: 0.65rem;
+  border-radius: 10px;
+  margin-bottom: 0.75rem;
+}
+
 .error-banner {
   background: color-mix(in srgb, var(--danger), #000 70%);
   border: 1px solid var(--danger);
