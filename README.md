@@ -10,8 +10,8 @@ A lightweight browser-only chat client that calls hosted LLM endpoints via `fetc
 
 ## Setup
 
-1. Serve this folder locally with any static file server (for example: `python3 -m http.server 8000`).
-2. Open `http://localhost:8000` in your browser.
+1. **No-command launch:** open `open.html` (or `index.html`) directly in your browser by double-clicking the file in your file explorer.
+2. **Optional local server launch:** serve this folder locally with any static file server (for example: `python3 -m http.server 8000`) and open `http://localhost:8000`.
 3. In **Settings**, provide:
    - Provider: `OpenRouter` or `Hugging Face`
    - Model: one of the listed free-tier options for the selected provider
