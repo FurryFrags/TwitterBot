@@ -10,8 +10,12 @@ const providers = {
     buildHeaders: ({ apiKey }) => ({
       "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey}`,
-      "HTTP-Referer": window.location.origin,
-      "X-Title": "Browser Chat UI",
+      ...(window.location.origin.startsWith("http")
+        ? {
+            "HTTP-Referer": window.location.origin,
+            "X-Title": "Browser Chat UI",
+          }
+        : {}),
     }),
     buildPayload: ({ model, messages }) => ({
       model,

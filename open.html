@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Open Browser Chat</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="app-shell launcher-shell">
+    <section class="settings launcher-panel" aria-labelledby="launcher-heading">
+      <h1 id="launcher-heading">Open Browser Chat</h1>
+      <p class="help-text">No local server command is required. Click the button below to launch the app in this browser.</p>
+      <div class="launcher-actions">
+        <button id="openAppButton" type="button">Open Browser Chat</button>
+        <a id="directLink" href="index.html">Open via direct link</a>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const openAppButton = document.getElementById("openAppButton");
+    const directLink = document.getElementById("directLink");
+    const appUrl = new URL("index.html", window.location.href).toString();
+
+    directLink.href = appUrl;
+
+    openAppButton.addEventListener("click", () => {
+      window.location.href = appUrl;
+    });
+  </script>
+</body>
+</html>
